@@ -4,11 +4,9 @@ import llama_cpp.llama_tokenizer
 import gradio as gr
 
 llama = llama_cpp.Llama.from_pretrained(
-    repo_id="Qwen/Qwen1.5-0.5B-Chat-GGUF",
-    filename="*q8_0.gguf",
-    tokenizer=llama_cpp.llama_tokenizer.LlamaHFTokenizer.from_pretrained(
-        "Qwen/Qwen1.5-0.5B"
-    ),
+    repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
+    filename="*Q4_K_M.gguf",
+    n_ctx=1024,
     verbose=False,
 )
 
@@ -21,6 +19,8 @@ def predict(message, history):
     for user_message, assistant_message in history:
         messages.append({"role": "user", "content": user_message})
         messages.append({"role": "assistant", "content": assistant_message})
+
+    gr.Info(f"user input: {message}")
 
     messages.append({"role": "user", "content": message})
 
@@ -64,4 +64,4 @@ with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.queue().launch()
