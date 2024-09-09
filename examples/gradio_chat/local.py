@@ -1,7 +1,10 @@
 import llama_cpp
 import llama_cpp.llama_tokenizer
-
+import uuid
 import gradio as gr
+from time import sleep
+from guard import guard
+from guard import logging_utils
 
 llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
@@ -12,6 +15,9 @@ llama = llama_cpp.Llama.from_pretrained(
 
 model = "gpt-3.5-turbo"
 
+convo_id = str(uuid.uuid4())[:8]
+logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
+
 
 def predict(message, history):
     messages = []
@@ -20,20 +26,32 @@ def predict(message, history):
         messages.append({"role": "user", "content": user_message})
         messages.append({"role": "assistant", "content": assistant_message})
 
-    gr.Info(f"user input: {message}")
+    logger.info(f"user message:{message}")
+    if not guard.is_permitted(message):
+        out_of_scope_message = "This prompt is out of scope for your role."
+        response = out_of_scope_message.split()
+        logger.info(f"is_permitted: False")
+        text = ""
 
-    messages.append({"role": "user", "content": message})
+        for chunk in response:
+            sleep(0.05)
+            content = chunk
+            if content:
+                text += content + " "
+                yield text
+    else:
+        messages.append({"role": "user", "content": message})
 
-    response = llama.create_chat_completion_openai_v1(
-        model=model, messages=messages, stream=True
-    )
-
-    text = ""
-    for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content:
-            text += content
-            yield text
+        response = llama.create_chat_completion_openai_v1(
+            model=model, messages=messages, stream=True
+        )
+        logger.info(f"is_permitted: True")
+        text = ""
+        for chunk in response:
+            content = chunk.choices[0].delta.content
+            if content:
+                text += content
+                yield text
 
 
 js = """function () {
