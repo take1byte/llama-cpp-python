@@ -5,6 +5,9 @@ import gradio as gr
 from time import sleep
 from guard import guard
 from guard import logging_utils
+from guard.constants import INPUT_FORMAT_MSG, OUT_OF_SCOPE_MSG
+from guard.prompt_handler import split_instructions_and_data
+from guard.response_handler import response_generator
 
 llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
@@ -22,35 +25,37 @@ logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
 def predict(message, history):
     messages = []
 
-    for user_message, assistant_message in history:
-        messages.append({"role": "user", "content": user_message})
-        messages.append({"role": "assistant", "content": assistant_message})
+    instr, data = split_instructions_and_data(message)
 
     logger.info(f"user message:{message}")
-    if not guard.is_permitted(message):
-        out_of_scope_message = "This prompt is out of scope for your role."
-        response = out_of_scope_message.split()
-        logger.info(f"is_permitted: False")
-        text = ""
+    logger.info(f"user instruction:{instr}; user data:{data}")
 
-        for chunk in response:
-            sleep(0.05)
-            content = chunk
-            if content:
-                text += content + " "
-                yield text
+    if instr is None:
+        for text in response_generator(INPUT_FORMAT_MSG):
+            yield text
     else:
-        messages.append({"role": "user", "content": message})
+        message = instr if data is None else f"{instr} {data}"
 
-        response = llama.create_chat_completion_openai_v1(
-            model=model, messages=messages, stream=True
-        )
-        logger.info(f"is_permitted: True")
-        text = ""
-        for chunk in response:
-            content = chunk.choices[0].delta.content
-            if content:
-                text += content
+        for user_message, assistant_message in history:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": assistant_message})
+
+        if guard.is_permitted(instr):
+            logger.info(f"is_permitted: True")
+
+            messages.append({"role": "user", "content": message})
+            response = llama.create_chat_completion_openai_v1(
+                model=model, messages=messages, stream=True
+            )
+            text = ""
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    text += content
+                    yield text
+        else:
+            logger.info(f"is_permitted: False")
+            for text in response_generator(OUT_OF_SCOPE_MSG):
                 yield text
 
 
@@ -75,8 +80,8 @@ with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo
         predict,
         fill_height=True,
         examples=[
-            "What is the capital of France?",
-            "Who was the first person on the moon?",
+            "I: summarize the document D: [document text]",
+            "I: write an article about cybersecurity",
         ],
     )
 
