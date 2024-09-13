@@ -6,7 +6,7 @@ from time import sleep
 from guard import guard
 from guard import logging_utils
 from guard.constants import INPUT_FORMAT_MSG, OUT_OF_SCOPE_MSG
-from guard.prompt_handler import split_instructions_and_data
+from guard.prompt_handler import split_instructions_and_data, rewrite
 from guard.response_handler import response_generator
 
 llama = llama_cpp.Llama.from_pretrained(
@@ -34,7 +34,10 @@ def predict(message, history):
         for text in response_generator(INPUT_FORMAT_MSG):
             yield text
     else:
-        message = instr if data is None else f"{instr} {data}"
+        rewritten_instr = rewrite(instr)
+        logger.info(f"rewritten user instruction:{rewritten_instr}")
+
+        message = instr if data is None else f"{rewritten_instr} {data}"
 
         for user_message, assistant_message in history:
             messages.append({"role": "user", "content": user_message})
