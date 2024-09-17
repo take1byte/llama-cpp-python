@@ -21,8 +21,10 @@ model = "gpt-3.5-turbo"
 convo_id = str(uuid.uuid4())[:8]
 logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
 
+SECURED = True
 
-def predict(message, history):
+
+def secured_predict(message, history, principal="guest@domain.com"):
     messages = []
 
     instr, data = split_instructions_and_data(message)
@@ -43,7 +45,7 @@ def predict(message, history):
             messages.append({"role": "user", "content": user_message})
             messages.append({"role": "assistant", "content": assistant_message})
 
-        if guard.is_permitted(instr):
+        if guard.is_permitted(instr, principal=principal):
             logger.info(f"is_permitted: True")
 
             messages.append({"role": "user", "content": message})
@@ -62,6 +64,27 @@ def predict(message, history):
                 yield text
 
 
+def predict(message, history):
+    messages = []
+
+    logger.info(f"user message:{message}")
+
+    for user_message, assistant_message in history:
+        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "assistant", "content": assistant_message})
+
+    messages.append({"role": "user", "content": message})
+    response = llama.create_chat_completion_openai_v1(
+        model=model, messages=messages, stream=True
+    )
+    text = ""
+    for chunk in response:
+        content = chunk.choices[0].delta.content
+        if content:
+            text += content
+            yield text
+
+
 js = """function () {
   gradioURL = window.location.href
   if (!gradioURL.endsWith('?__theme=dark')) {
@@ -76,16 +99,28 @@ footer {
 full-height {
     height: 100%;
 }
+label.svelte-1b6s6s {visibility: hidden}
 """
 
 with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo:
-    gr.ChatInterface(
-        predict,
-        fill_height=True,
-        examples=[
+    title = "Secured Chat" if SECURED else "Unsecured Chat"
+    examples = (
+        [
             "I: summarize the document D: [document text]",
             "I: write an article about cybersecurity",
-        ],
+        ]
+        if SECURED
+        else [
+            "summarize the document: [document text]",
+            "write an article about cybersecurity",
+        ]
+    )
+    predict_fn = secured_predict if SECURED else predict
+    gr.ChatInterface(
+        predict_fn,
+        fill_height=True,
+        examples=None,
+        title=title,
     )
 
 
