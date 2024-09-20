@@ -37,15 +37,15 @@ def secured_predict(message, history, principal="guest@domain.com"):
             yield text
     else:
         rewritten_instr = rewrite(instr)
-        logger.info(f"rewritten user instruction:{rewritten_instr}")
+        logger.info(f"rewritten user instruction: {rewritten_instr}")
 
-        message = instr if data is None else f"{rewritten_instr} {data}"
+        message = rewritten_instr if data is None else f"{rewritten_instr} {data}"
 
         for user_message, assistant_message in history:
             messages.append({"role": "user", "content": user_message})
             messages.append({"role": "assistant", "content": assistant_message})
 
-        if guard.is_permitted(instr, principal=principal):
+        if guard.is_permitted(rewritten_instr, principal=principal):
             logger.info(f"is_permitted: True")
 
             messages.append({"role": "user", "content": message})
