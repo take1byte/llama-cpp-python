@@ -1,14 +1,14 @@
-import llama_cpp
-import llama_cpp.llama_tokenizer
 import uuid
+
 import gradio as gr
-from time import sleep
-from guard import guard
-from guard import logging_utils
+from guard import guard, logging_utils
 from guard.constants import INPUT_FORMAT_MSG, OUT_OF_SCOPE_MSG
-from guard.prompt_handler import split_instructions_and_data, rewrite
+from guard.prompt_handler import rewrite, split_instructions_and_data
 from guard.response_handler import response_generator
 from llm_guard.input_scanners import BanTopics
+
+import llama_cpp
+import llama_cpp.llama_tokenizer
 
 llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
@@ -48,7 +48,7 @@ def secured_predict(message, history, principal="guest@domain.com"):
             messages.append({"role": "assistant", "content": assistant_message})
 
         if guard.is_permitted(rewritten_instr, principal=principal):
-            logger.info(f"is_permitted: True")
+            logger.info("is_permitted: True")
 
             messages.append({"role": "user", "content": message})
             response = llama.create_chat_completion_openai_v1(
@@ -61,7 +61,7 @@ def secured_predict(message, history, principal="guest@domain.com"):
                     text += content
                     yield text
         else:
-            logger.info(f"is_permitted: False")
+            logger.info("is_permitted: False")
             for text in response_generator(OUT_OF_SCOPE_MSG):
                 yield text
 
@@ -107,9 +107,7 @@ def predict(message, history):
         messages.append({"role": "assistant", "content": assistant_message})
 
     messages.append({"role": "user", "content": message})
-    response = llama.create_chat_completion_openai_v1(
-        model=model, messages=messages, stream=True
-    )
+    response = llama.create_chat_completion_openai_v1(model=model, messages=messages, stream=True)
     text = ""
     for chunk in response:
         content = chunk.choices[0].delta.content
