@@ -3,7 +3,11 @@ import uuid
 import gradio as gr
 from guard import guard, logging_utils
 from guard.constants import INPUT_FORMAT_MSG, OUT_OF_SCOPE_MSG
-from guard.prompt_handler import rewrite, split_instructions_and_data
+from guard.prompt_handler import (
+    rewrite,
+    secure_against_prompt_injection,
+    split_instructions_and_data,
+)
 from guard.response_handler import response_generator
 from llm_guard.input_scanners import BanTopics
 
@@ -22,11 +26,46 @@ model = "gpt-3.5-turbo"
 convo_id = str(uuid.uuid4())[:8]
 logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
 
-SECURED = False
-LLM_GUARD = True
+SECURED_AGAINST_PROMPT_INJECTIONS = True
+SECURED_BY_POLICY = False
+LLM_GUARD = False
 
 
-def secured_predict(message, history, principal="guest@domain.com"):
+def secured_against_prompt_injections_predict(message, history):
+    messages = []
+
+    instr, data = split_instructions_and_data(message)
+
+    logger.info(f"user message:{message}")
+    logger.info(f"user instruction:{instr}; user data:{data}")
+
+    if instr is None:
+        for text in response_generator(INPUT_FORMAT_MSG):
+            yield text
+    else:
+        secure_instr, secure_data = secure_against_prompt_injection(instr, data)
+        logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
+
+        message = secure_instr if data is None else f"{secure_instr} {secure_data}"
+
+        for user_message, assistant_message in history:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": assistant_message})
+
+        messages.append({"role": "user", "content": message})
+        response = llama.create_chat_completion_openai_v1(
+            model=model, messages=messages, stream=True
+        )
+        text = ""
+        for chunk in response:
+            content = chunk.choices[0].delta.content
+            if content:
+                text += content
+                logger.info(f"Response: {text}")
+                yield text
+
+
+def secured_by_policy_predict(message, history, principal="guest@domain.com"):
     messages = []
 
     instr, data = split_instructions_and_data(message)
@@ -134,21 +173,27 @@ label.svelte-1b6s6s {visibility: hidden}
 """
 
 with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo:
-    title = "Secured Chat" if SECURED else "Unsecured Chat"
+    title = (
+        "Secured Chat"
+        if SECURED_BY_POLICY or SECURED_AGAINST_PROMPT_INJECTIONS
+        else "Unsecured Chat"
+    )
     examples = (
         [
             "I: summarize the document D: [document text]",
             "I: write an article about cybersecurity",
         ]
-        if SECURED
+        if SECURED_BY_POLICY or SECURED_AGAINST_PROMPT_INJECTIONS
         else [
             "summarize the document: [document text]",
             "write an article about cybersecurity",
         ]
     )
 
-    if SECURED:
-        predict_fn = secured_predict
+    if SECURED_AGAINST_PROMPT_INJECTIONS:
+        predict_fn = secured_against_prompt_injections_predict
+    elif SECURED_BY_POLICY:
+        predict_fn = secured_by_policy_predict
     elif LLM_GUARD:
         predict_fn = llm_guard_predict
     else:
