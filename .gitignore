@@ -180,3 +180,5 @@ cython_debug/
 docker/open_llama/*.bin
 
 chat_logs/
+
+.gradio/
