@@ -43,25 +43,30 @@ def secured_against_prompt_injections_predict(message, history):
         for text in response_generator(INPUT_FORMAT_MSG):
             yield text
     else:
-        secure_instr, secure_data = secure_against_prompt_injection(instr, data)
-        logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
+        secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
 
-        message = secure_instr if data is None else f"{secure_instr} {secure_data}"
+        if authoring_hint is None:
+            logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
 
-        for user_message, assistant_message in history:
-            messages.append({"role": "user", "content": user_message})
-            messages.append({"role": "assistant", "content": assistant_message})
+            message = secure_instr if data is None else f"{secure_instr} {secure_data}"
 
-        messages.append({"role": "user", "content": message})
-        response = llama.create_chat_completion_openai_v1(
-            model=model, messages=messages, stream=True
-        )
-        text = ""
-        for chunk in response:
-            content = chunk.choices[0].delta.content
-            if content:
-                text += content
-                logger.info(f"Response: {text}")
+            for user_message, assistant_message in history:
+                messages.append({"role": "user", "content": user_message})
+                messages.append({"role": "assistant", "content": assistant_message})
+
+            messages.append({"role": "user", "content": message})
+            response = llama.create_chat_completion_openai_v1(
+                model=model, messages=messages, stream=True
+            )
+            text = ""
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    text += content
+                    logger.info(f"Response: {text}")
+                    yield text
+        else:
+            for text in response_generator(authoring_hint):
                 yield text
 
 
