@@ -17,7 +17,7 @@ import llama_cpp.llama_tokenizer
 llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
     filename="*Q4_K_M.gguf",
-    n_ctx=1024,
+    n_ctx=4096,
     verbose=False,
 )
 
@@ -63,9 +63,11 @@ def secured_against_prompt_injections_predict(message, history):
                 content = chunk.choices[0].delta.content
                 if content:
                     text += content
-                    logger.info(f"Response: {text}")
                     yield text
+                elif text != "":
+                    logger.info(f"Response: {text}")
         else:
+            logger.info(f"Response: {authoring_hint}")
             for text in response_generator(authoring_hint):
                 yield text
 
@@ -204,12 +206,7 @@ with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo
     else:
         predict_fn = predict
 
-    gr.ChatInterface(
-        predict_fn,
-        fill_height=True,
-        examples=None,
-        title=title,
-    )
+    gr.ChatInterface(predict_fn, fill_height=True, examples=None, title=title)
 
 
 if __name__ == "__main__":
