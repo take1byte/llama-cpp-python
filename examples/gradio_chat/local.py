@@ -44,10 +44,9 @@ def secured_against_prompt_injections_predict(message, history):
             yield text
     else:
         secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
+        logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
 
         if authoring_hint is None:
-            logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
-
             message = secure_instr if data is None else f"{secure_instr} {secure_data}"
 
             for user_message, assistant_message in history:
