@@ -53,6 +53,8 @@ def secured_against_prompt_injections_predict(message, history):
                 messages.append({"role": "user", "content": user_message})
                 messages.append({"role": "assistant", "content": assistant_message})
 
+            logger.info(f"history: {history}")
+
             messages.append({"role": "user", "content": message})
             response = llama.create_chat_completion_openai_v1(
                 model=model, messages=messages, stream=True
