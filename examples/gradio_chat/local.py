@@ -2,7 +2,11 @@ import uuid
 
 import gradio as gr
 from guard import guard, logging_utils
-from guard.constants import INPUT_FORMAT_MSG, OUT_OF_SCOPE_MSG
+from guard.constants import (
+    INPUT_FORMAT_MSG,
+    OUT_OF_SCOPE_MSG,
+    UNAUTHORIZED_TEXT_IN_PROMPT_MSG,
+)
 from guard.prompt_handler import (
     rewrite,
     secure_against_prompt_injection,
@@ -27,6 +31,8 @@ logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
 
 SECURED_AGAINST_PROMPT_INJECTIONS = True
 SECURED_BY_POLICY = False
+
+WRONG_FORMAT_MSG = "User message in wrong format"
 
 
 def secured_against_prompt_injections_predict(message, history):
@@ -180,7 +186,7 @@ with gr.Blocks(js=js, css=css) as demo:
         history.append({"role": "assistant", "content": ""})
 
         if instr is None:
-            history[-2]["content"] = "User message in wrong format"
+            history[-2]["content"] = WRONG_FORMAT_MSG
             for text in response_generator(INPUT_FORMAT_MSG):
                 history[-1]["content"] = text
                 yield history
@@ -222,7 +228,7 @@ with gr.Blocks(js=js, css=css) as demo:
                         logger.info(f"Response: {history[-1]["content"]}")
             else:
                 logger.info(f"Response: {authoring_hint}")
-                history[-2]["content"] = "Unauthorized text in prompt"
+                history[-2]["content"] = UNAUTHORIZED_TEXT_IN_PROMPT_MSG
                 for text in response_generator(authoring_hint):
                     history[-1]["content"] = text
                     yield history
