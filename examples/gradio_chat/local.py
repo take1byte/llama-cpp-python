@@ -17,7 +17,7 @@ llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
     filename="*Q4_K_M.gguf",
     n_ctx=4096,
-    verbose=True,
+    verbose=False,
 )
 
 model = "gpt-3.5-turbo"
@@ -36,24 +36,25 @@ def secured_against_prompt_injections_predict(message, history):
 
     logger.info(f"user message:{message}")
     logger.info(f"user instruction:{instr}; user data:{data}")
+    logger.info(f"history: {history}")
 
     if instr is None:
         for text in response_generator(INPUT_FORMAT_MSG):
             yield text
     else:
         secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
-        logger.info(f"Secure instruction: {secure_instr}; Secure data: {secure_data}")
+        logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
 
         if authoring_hint is None:
             message = secure_instr if data is None else f"{secure_instr} {secure_data}"
 
-            for user_message, assistant_message in history:
-                messages.append({"role": "user", "content": user_message})
-                messages.append({"role": "assistant", "content": assistant_message})
+            for record in history:
+                if record.get("role") == "user":
+                    messages.append({"role": "user", "content": record.get("content")})
+                elif record.get("role") == "assistant":
+                    messages.append({"role": "assistant", "content": record.get("content")})
 
-            logger.info(f"history: {history}")
-
-            messages.append({"role": "user", "content": message})
+            messages.append({"role": "user", "metadata": {"title": None}, "content": message})
             response = llama.create_chat_completion_openai_v1(
                 model=model, messages=messages, stream=True
             )
@@ -172,7 +173,7 @@ with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo
     else:
         predict_fn = predict
 
-    gr.ChatInterface(predict_fn, fill_height=True, examples=None, title=title)
+    gr.ChatInterface(predict_fn, type="messages", fill_height=True, examples=None, title=title)
 
 
 if __name__ == "__main__":
