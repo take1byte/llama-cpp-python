@@ -9,7 +9,6 @@ from guard.prompt_handler import (
     split_instructions_and_data,
 )
 from guard.response_handler import response_generator
-from llm_guard.input_scanners import BanTopics
 
 import llama_cpp
 import llama_cpp.llama_tokenizer
@@ -28,7 +27,6 @@ logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
 
 SECURED_AGAINST_PROMPT_INJECTIONS = True
 SECURED_BY_POLICY = False
-LLM_GUARD = False
 
 
 def secured_against_prompt_injections_predict(message, history):
@@ -113,37 +111,6 @@ def secured_by_policy_predict(message, history, principal="guest@domain.com"):
                 yield text
 
 
-def llm_guard_predict(message, history):
-    messages = []
-
-    logger.info(f"user message:{message}")
-
-    for user_message, assistant_message in history:
-        messages.append({"role": "user", "content": user_message})
-        messages.append({"role": "assistant", "content": assistant_message})
-
-    scanner = BanTopics(topics=["violence"], threshold=0.5)
-    sanitized_prompt, is_valid, risk_score = scanner.scan(message)
-    logger.info(
-        f"sanitized_prompt: {sanitized_prompt}; is_valid: {is_valid}; risk_score: {risk_score}"
-    )
-
-    if is_valid:
-        messages.append({"role": "user", "content": sanitized_prompt})
-        response = llama.create_chat_completion_openai_v1(
-            model=model, messages=messages, stream=True
-        )
-        text = ""
-        for chunk in response:
-            content = chunk.choices[0].delta.content
-            if content:
-                text += content
-                yield text
-    else:
-        for text in response_generator(OUT_OF_SCOPE_MSG):
-            yield text
-
-
 def predict(message, history):
     messages = []
 
@@ -202,8 +169,6 @@ with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo
         predict_fn = secured_against_prompt_injections_predict
     elif SECURED_BY_POLICY:
         predict_fn = secured_by_policy_predict
-    elif LLM_GUARD:
-        predict_fn = llm_guard_predict
     else:
         predict_fn = predict
 
