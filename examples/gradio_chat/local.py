@@ -148,33 +148,87 @@ full-height {
 label.svelte-1b6s6s {visibility: hidden}
 """
 
-with gr.Blocks(theme=gr.themes.Soft(), js=js, css=css, fill_height=True) as demo:
-    title = (
-        "Secured Chat"
-        if SECURED_BY_POLICY or SECURED_AGAINST_PROMPT_INJECTIONS
-        else "Unsecured Chat"
+with gr.Blocks(js=js, css=css) as demo:
+    chatbot = gr.Chatbot(type="messages")
+    msg = gr.Textbox(
+        label=(
+            "Please input your prompt as I: [your instruction or question]"
+            "D: [(optional) data, e.g., document]"
+        )
     )
-    examples = (
-        [
-            "I: summarize the document D: [document text]",
-            "I: write an article about cybersecurity",
+    clear = gr.Button("Clear")
+
+    def user(user_message, history: list):
+        return "", history + [
+            {"role": "user", "content": user_message, "original_message": user_message}
         ]
-        if SECURED_BY_POLICY or SECURED_AGAINST_PROMPT_INJECTIONS
-        else [
-            "summarize the document: [document text]",
-            "write an article about cybersecurity",
-        ]
-    )
 
-    if SECURED_AGAINST_PROMPT_INJECTIONS:
-        predict_fn = secured_against_prompt_injections_predict
-    elif SECURED_BY_POLICY:
-        predict_fn = secured_by_policy_predict
-    else:
-        predict_fn = predict
+    def bot(history: list):
+        messages = []
 
-    gr.ChatInterface(predict_fn, type="messages", fill_height=True, examples=None, title=title)
+        if len(history) > 0 and history[-1]["role"] == "user":
+            user_message = history[-1]["content"]
+        else:
+            user_message = ""
 
+        instr, data = split_instructions_and_data(user_message)
+
+        logger.info(f"user message:{user_message}")
+        logger.info(f"user instruction:{instr}; user data:{data}")
+        logger.info(f"history: {history}")
+
+        history.append({"role": "assistant", "content": ""})
+
+        if instr is None:
+            history[-2]["content"] = "User message in wrong format"
+            for text in response_generator(INPUT_FORMAT_MSG):
+                history[-1]["content"] = text
+                yield history
+        else:
+            secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
+            logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
+
+            if authoring_hint is None:
+                message = secure_instr if data is None else f"{secure_instr} {secure_data}"
+                history[-2]["content"] = message
+
+                for record in history:
+                    if record.get("role") == "user":
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": record.get("content"),
+                            }
+                        )
+                    elif record.get("role") == "assistant":
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": record.get("content"),
+                            }
+                        )
+
+                logger.info(f"messages: {messages}")
+                response = llama.create_chat_completion_openai_v1(
+                    model=model, messages=messages, stream=True
+                )
+
+                for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        history[-1]["content"] += content
+                        yield history
+                    elif history[-1]["content"] != "":
+                        logger.info(f"Response: {history[-1]["content"]}")
+            else:
+                logger.info(f"Response: {authoring_hint}")
+                history[-2]["content"] = "Unauthorized text in prompt"
+                for text in response_generator(authoring_hint):
+                    history[-1]["content"] = text
+                    yield history
+
+    msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(bot, chatbot, chatbot)
+    clear.click(lambda: None, None, chatbot, queue=False)
 
 if __name__ == "__main__":
     demo.queue().launch()
