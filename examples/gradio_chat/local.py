@@ -20,7 +20,7 @@ import llama_cpp.llama_tokenizer
 llama = llama_cpp.Llama.from_pretrained(
     repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
     filename="*Q4_K_M.gguf",
-    n_ctx=4096,
+    n_ctx=131071,
     verbose=False,
 )
 
@@ -33,6 +33,7 @@ SECURED_AGAINST_PROMPT_INJECTIONS = True
 SECURED_BY_POLICY = False
 
 WRONG_FORMAT_MSG = "User message in wrong format"
+DEBUG = False
 
 
 def secured_against_prompt_injections_predict(message, history):
@@ -42,7 +43,8 @@ def secured_against_prompt_injections_predict(message, history):
 
     logger.info(f"user message:{message}")
     logger.info(f"user instruction:{instr}; user data:{data}")
-    logger.info(f"history: {history}")
+    if DEBUG:
+        logger.info(f"history: {history}")
 
     if instr is None:
         for text in response_generator(INPUT_FORMAT_MSG):
@@ -181,7 +183,8 @@ with gr.Blocks(js=js, css=css) as demo:
 
         logger.info(f"user message:{user_message}")
         logger.info(f"user instruction:{instr}; user data:{data}")
-        logger.info(f"history: {history}")
+        if DEBUG:
+            logger.info(f"history: {history}")
 
         history.append({"role": "assistant", "content": ""})
 
@@ -213,8 +216,8 @@ with gr.Blocks(js=js, css=css) as demo:
                                 "content": record.get("content"),
                             }
                         )
-
-                logger.info(f"messages: {messages}")
+                if DEBUG:
+                    logger.info(f"messages: {messages}")
                 response = llama.create_chat_completion_openai_v1(
                     model=model, messages=messages, stream=True
                 )
