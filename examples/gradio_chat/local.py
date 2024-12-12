@@ -5,6 +5,7 @@ from guard import guard, logging_utils
 from guard.constants import (
     INPUT_FORMAT_MSG,
     OUT_OF_SCOPE_MSG,
+    SANITIZATION_INSTR1,
     UNAUTHORIZED_TEXT_IN_PROMPT_MSG,
 )
 from guard.prompt_handler import (
@@ -50,7 +51,9 @@ def secured_against_prompt_injections_predict(message, history):
         for text in response_generator(INPUT_FORMAT_MSG):
             yield text
     else:
-        secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
+        secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(
+            instr, data, sanitization_prompt=SANITIZATION_INSTR1
+        )
         logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
 
         if authoring_hint is None:
@@ -194,7 +197,9 @@ with gr.Blocks(js=js, css=css) as demo:
                 history[-1]["content"] = text
                 yield history
         else:
-            secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(instr, data)
+            secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(
+                instr, data, sanitization_prompt=SANITIZATION_INSTR1
+            )
             logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
 
             if authoring_hint is None:
