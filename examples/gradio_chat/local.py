@@ -29,6 +29,10 @@ model = "gpt-3.5-turbo"
 
 convo_id = str(uuid.uuid4())[:8]
 logger = logging_utils.build_logger("convo_log", f"convo_log_{convo_id}.log")
+csv_logger = logging_utils.build_logger(
+    "prompt_response_pairs", f"prompt_response_pairs_{convo_id}.csv", log_to_csv=True
+)
+csv_logger.info(["user_message", "response", "secure_instruction", "secure_data"])
 
 SECURED_AGAINST_PROMPT_INJECTIONS = True
 SECURED_BY_POLICY = False
@@ -175,8 +179,6 @@ with gr.Blocks(js=js, css=css) as demo:
         ]
 
     def bot(history: list):
-        messages = []
-
         if len(history) > 0 and history[-1]["role"] == "user":
             user_message = history[-1]["content"]
         else:
@@ -184,14 +186,15 @@ with gr.Blocks(js=js, css=css) as demo:
 
         instr, data = split_instructions_and_data(user_message)
 
-        logger.info(f"user message:{user_message}")
-        logger.info(f"user instruction:{instr}; user data:{data}")
         if DEBUG:
+            logger.info(f"user message:{user_message}")
+            logger.info(f"user instruction:{instr}; user data:{data}")
             logger.info(f"history: {history}")
 
         history.append({"role": "assistant", "content": ""})
 
         if instr is None:
+            csv_logger.info([user_message, WRONG_FORMAT_MSG, "", ""])
             history[-2]["content"] = WRONG_FORMAT_MSG
             for text in response_generator(INPUT_FORMAT_MSG):
                 history[-1]["content"] = text
@@ -200,12 +203,14 @@ with gr.Blocks(js=js, css=css) as demo:
             secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(
                 instr, data, sanitization_prompt=SANITIZATION_INSTR1
             )
-            logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
+            if DEBUG:
+                logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
 
             if authoring_hint is None:
                 message = secure_instr if data is None else f"{secure_instr} {secure_data}"
                 history[-2]["content"] = message
 
+                messages = []
                 for record in history:
                     if record.get("role") == "user":
                         messages.append(
@@ -221,8 +226,10 @@ with gr.Blocks(js=js, css=css) as demo:
                                 "content": record.get("content"),
                             }
                         )
+
                 if DEBUG:
                     logger.info(f"messages: {messages}")
+
                 response = llama.create_chat_completion_openai_v1(
                     model=model, messages=messages, stream=True
                 )
@@ -233,9 +240,15 @@ with gr.Blocks(js=js, css=css) as demo:
                         history[-1]["content"] += content
                         yield history
                     elif history[-1]["content"] != "":
-                        logger.info(f"Response: {history[-1]["content"]}")
+                        if DEBUG:
+                            logger.info(f"Response: {history[-1]["content"]}")
+                        csv_logger.info(
+                            [user_message, history[-1]["content"], secure_instr, secure_data]
+                        )
             else:
-                logger.info(f"Response: {authoring_hint}")
+                if DEBUG:
+                    logger.info(f"Response: {authoring_hint}")
+                csv_logger.info([user_message, authoring_hint, UNAUTHORIZED_TEXT_IN_PROMPT_MSG, ""])
                 history[-2]["content"] = UNAUTHORIZED_TEXT_IN_PROMPT_MSG
                 for text in response_generator(authoring_hint):
                     history[-1]["content"] = text
