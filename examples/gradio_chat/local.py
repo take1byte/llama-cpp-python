@@ -185,7 +185,13 @@ with gr.Blocks(js=js, css=css) as demo:
             user_message = ""
 
         history_updates = chat_completion_helper(
-            history, user_message, csv_logger, logger=logger, llama=llama, stream=True
+            history,
+            user_message,
+            sanitization_prompt=SANITIZATION_INSTR1,
+            csv_logger=csv_logger,
+            logger=logger,
+            llama=llama,
+            stream=True,
         )
         for history_update in history_updates:
             yield history_update
