@@ -2,11 +2,11 @@ import uuid
 
 import gradio as gr
 from guard import guard, logging_utils
+from guard.chat_utils import chat_completion_helper
 from guard.constants import (
     INPUT_FORMAT_MSG,
     OUT_OF_SCOPE_MSG,
     SANITIZATION_INSTR1,
-    UNAUTHORIZED_TEXT_IN_PROMPT_MSG,
 )
 from guard.prompt_handler import (
     rewrite,
@@ -184,75 +184,11 @@ with gr.Blocks(js=js, css=css) as demo:
         else:
             user_message = ""
 
-        instr, data = split_instructions_and_data(user_message)
-
-        if DEBUG:
-            logger.info(f"user message:{user_message}")
-            logger.info(f"user instruction:{instr}; user data:{data}")
-            logger.info(f"history: {history}")
-
-        history.append({"role": "assistant", "content": ""})
-
-        if instr is None:
-            csv_logger.info([user_message, WRONG_FORMAT_MSG, "", ""])
-            history[-2]["content"] = WRONG_FORMAT_MSG
-            for text in response_generator(INPUT_FORMAT_MSG):
-                history[-1]["content"] = text
-                yield history
-        else:
-            secure_instr, secure_data, authoring_hint = secure_against_prompt_injection(
-                instr, data, sanitization_prompt=SANITIZATION_INSTR1
-            )
-            if DEBUG:
-                logger.info(f"\nSecure instruction: {secure_instr}\nSecure data: {secure_data}")
-
-            if authoring_hint is None:
-                message = secure_instr if data is None else f"{secure_instr} {secure_data}"
-                history[-2]["content"] = message
-
-                messages = []
-                for record in history:
-                    if record.get("role") == "user":
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": record.get("content"),
-                            }
-                        )
-                    elif record.get("role") == "assistant":
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": record.get("content"),
-                            }
-                        )
-
-                if DEBUG:
-                    logger.info(f"messages: {messages}")
-
-                response = llama.create_chat_completion_openai_v1(
-                    model=model, messages=messages, stream=True
-                )
-
-                for chunk in response:
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        history[-1]["content"] += content
-                        yield history
-                    elif history[-1]["content"] != "":
-                        if DEBUG:
-                            logger.info(f"Response: {history[-1]["content"]}")
-                        csv_logger.info(
-                            [user_message, history[-1]["content"], secure_instr, secure_data]
-                        )
-            else:
-                if DEBUG:
-                    logger.info(f"Response: {authoring_hint}")
-                csv_logger.info([user_message, authoring_hint, UNAUTHORIZED_TEXT_IN_PROMPT_MSG, ""])
-                history[-2]["content"] = UNAUTHORIZED_TEXT_IN_PROMPT_MSG
-                for text in response_generator(authoring_hint):
-                    history[-1]["content"] = text
-                    yield history
+        history_updates = chat_completion_helper(
+            history, user_message, csv_logger, logger=logger, llama=llama, stream=True
+        )
+        for history_update in history_updates:
+            yield history_update
 
     msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(bot, chatbot, chatbot)
     clear.click(lambda: None, None, chatbot, queue=False)
